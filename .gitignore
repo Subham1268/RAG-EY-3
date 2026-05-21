@@ -1,0 +1,60 @@
+# ── Python ────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+*.whl
+
+# ── Virtual environments ──────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+.env.local
+
+# ── Environment / secrets ─────────────────────────────────
+.env
+*.env
+
+# ── IDE ───────────────────────────────────────────────────
+.vscode/
+.idea/
+*.iml
+*.suo
+*.user
+.DS_Store
+Thumbs.db
+
+# ── Testing / coverage ────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
+*.xml
+
+# ── Logs ─────────────────────────────────────────────────
+*.log
+logs/
+
+# ── Docker ───────────────────────────────────────────────
+*.env.docker
+
+# ── Data / uploads (never commit client documents) ───────
+documents/
+uploads/
+*.pdf
+*.pptx
+*.docx
+*.xlsx
+
+# ── Pinecone / DB local state ─────────────────────────────
+*.db
+*.sqlite
+
+# ── Zip archives ─────────────────────────────────────────
+*.zip

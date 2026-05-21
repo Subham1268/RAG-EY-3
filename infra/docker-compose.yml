@@ -1,0 +1,58 @@
+version: "3.9"
+
+services:
+  # ── PostgreSQL metadata store ──────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: ey_rag_postgres
+    environment:
+      POSTGRES_DB:       ey_rag
+      POSTGRES_USER:     ey_rag_user
+      POSTGRES_PASSWORD: localdev_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ey_rag_user -d ey_rag"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ── FastAPI RAG Agent ──────────────────────────────────────────────────────
+  api:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile
+    container_name: ey_rag_api
+    env_file: ../.env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://ey_rag_user:localdev_password@postgres:5432/ey_rag
+      APP_ENV: development
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ../:/app
+    command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # ── Teams Bot ──────────────────────────────────────────────────────────────
+  bot:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile
+    container_name: ey_rag_bot
+    env_file: ../.env
+    environment:
+      AGENT_API_URL: http://api:8000
+      APP_ENV: development
+    ports:
+      - "3978:3978"
+    depends_on:
+      - api
+    command: python teams/app.py
+
+volumes:
+  postgres_data:
