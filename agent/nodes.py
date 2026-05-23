@@ -67,6 +67,14 @@ class AgentState(TypedDict):
     reflection_result: dict
     final_answer:      str
 
+'''
+FOR OPEN-AI
+from langchain_openai import ChatOpenAI
+
+_llm      = ChatOpenAI(model=settings.openai_chat_model, temperature=0)
+_llm_json = ChatOpenAI(model=settings.openai_chat_model, temperature=0,
+                        model_kwargs={"response_format": {"type": "json_object"}})
+'''
 
 # ── LLM instances ─────────────────────────────────────────────────────────────
 

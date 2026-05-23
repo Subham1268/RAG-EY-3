@@ -79,6 +79,16 @@ class DocumentIndexer:
                 metric="cosine",
                 spec=ServerlessSpec(cloud="aws", region="us-east-1"),
             )
+
+            '''
+            FOE OPENAI
+            pc.create_index(
+                name=settings.pinecone_index_name,
+                dimension=1536,   # ← back to OpenAI dimension
+                metric="cosine",
+                spec=ServerlessSpec(cloud="aws", region="us-east-1"),
+            )
+            '''
         self.index = pc.Index(settings.pinecone_index_name)
 
         # ── PostgreSQL ──────────────────────────────────────────────────────
