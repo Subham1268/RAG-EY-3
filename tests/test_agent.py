@@ -185,7 +185,7 @@ async def test_full_pipeline_aml_query():
 
     graph = build_graph()
     result = await graph.ainvoke(base_state(
-        question="What AML gaps did EY identify in the UAE bank assessment?"
+        question="What are the key risk and compliance findings in the GCC portfolio dashboard for Q4 2023?"
     ))
 
     assert result.get("final_answer") or result.get("answer")
@@ -204,6 +204,6 @@ async def test_full_pipeline_governance_query():
 
     graph  = build_graph()
     result = await graph.ainvoke(base_state(
-        question="What corporate governance improvements does EY recommend for Saudi companies preparing for IPO?"
+        question="What are the key risk and compliance findings in the GCC portfolio dashboard for Q4 2023?"
     ))
     assert result.get("final_answer") or result.get("answer")

@@ -152,6 +152,15 @@ Invoke-WebRequest -Uri "http://localhost:8000/chat" `
   -ContentType "application/json" `
   -Body '{"question": "What are the key findings from the AML framework assessment for the UAE bank?", "session_id": "test-001"}' `
   -UseBasicParsing | Select-Object -ExpandProperty Content
+
+
+
+  Invoke-WebRequest -Uri "http://localhost:8000/chat" `
+  -Method POST `
+  -ContentType "application/json" `
+  -Body '{"question": "What are the key risk and compliance findings in the GCC portfolio dashboard for Q4 2023?", "session_id": "test-007"}' `
+  -UseBasicParsing | Select-Object -ExpandProperty Content
+  
 ```
 
 ---

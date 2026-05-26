@@ -32,6 +32,7 @@ Manifest format (manifest.json):
       },
       ...
     ]
+    
 """
 
 import argparse

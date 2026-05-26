@@ -35,7 +35,6 @@ Thumbs.db
 .pytest_cache/
 .coverage
 htmlcov/
-*.xml
 
 # ── Logs ─────────────────────────────────────────────────
 *.log
@@ -44,13 +43,6 @@ logs/
 # ── Docker ───────────────────────────────────────────────
 *.env.docker
 
-# ── Data / uploads (never commit client documents) ───────
-documents/
-uploads/
-*.pdf
-*.pptx
-*.docx
-*.xlsx
 
 # ── Pinecone / DB local state ─────────────────────────────
 *.db

@@ -85,12 +85,14 @@ class Embedder:
             for chunk, emb, desc in zip(chunks, all_embeddings, descriptions)
         ]
 
+    
+    
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=10))
     async def _describe_image(self, chunk: IndexableChunk) -> str:
         """Use existing caption instead of calling GPT-4o Vision (free tier)."""
         return chunk.content or f"Image from {chunk.metadata.get('source_file', 'document')}"
-    
-    '''@retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=10))
+    '''
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=10))
     async def _describe_image(self, chunk: IndexableChunk) -> str:
         """Call GPT-4o Vision to generate a searchable description of an image."""
         response = await self.openai_client.chat.completions.create(
@@ -112,7 +114,8 @@ class Embedder:
                 }
             ],
         )
-        return response.choices[0].message.content.strip()'''
+        return response.choices[0].message.content.strip()
+        '''
 
     async def _batch_embed(
         self, texts: list[str], input_type: str = "search_document"
