@@ -3,6 +3,7 @@
 
 ---
 
+
 ## Architecture Overview
 
 ```
@@ -160,7 +161,7 @@ Invoke-WebRequest -Uri "http://localhost:8000/chat" `
   -ContentType "application/json" `
   -Body '{"question": "What are the key risk and compliance findings in the GCC portfolio dashboard for Q4 2023?", "session_id": "test-007"}' `
   -UseBasicParsing | Select-Object -ExpandProperty Content
-  
+
 ```
 
 ---

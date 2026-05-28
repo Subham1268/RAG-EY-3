@@ -151,10 +151,12 @@ async def main() -> None:
         )
         n = await ingest_file(file_path, metadata, doc_parser, chunker, embedder, indexer)
         total_chunks += n
-        await asyncio.sleep(10)  # wait 10 seconds between files
+        if len(jobs) > 1:
+            await asyncio.sleep(15)   # only matters if you have multiple files
 
     log.info("ingestion_complete", total_chunks=total_chunks, total_files=len(jobs))
     print(f"\n✅ Ingested {len(jobs)} documents → {total_chunks} chunks indexed.")
+
 
 
 if __name__ == "__main__":

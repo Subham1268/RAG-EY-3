@@ -73,22 +73,22 @@ class DocumentIndexer:
         # ── Pinecone ────────────────────────────────────────────────────────
         pc = Pinecone(api_key=settings.pinecone_api_key)
         if settings.pinecone_index_name not in [i.name for i in pc.list_indexes()]:
-            pc.create_index(
+            '''pc.create_index(
                 name=settings.pinecone_index_name,
                 dimension=1024,
                 metric="cosine",
                 spec=ServerlessSpec(cloud="aws", region="us-east-1"),
-            )
+            )'''
 
             '''
-            FOE OPENAI
+            FOE OPENAI '''
             pc.create_index(
                 name=settings.pinecone_index_name,
                 dimension=1536,   # ← back to OpenAI dimension
                 metric="cosine",
                 spec=ServerlessSpec(cloud="aws", region="us-east-1"),
             )
-            '''
+            
         self.index = pc.Index(settings.pinecone_index_name)
 
         # ── PostgreSQL ──────────────────────────────────────────────────────

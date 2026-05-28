@@ -119,19 +119,20 @@ class DocumentParser:
 
             # Extract embedded raster images
             for img_meta in page.get_images(full=True):
-                xref   = img_meta[0]
-                base_img = fitz_doc.extract_image(xref)
-                w, h     = base_img["width"], base_img["height"]
-                if w < self.MIN_IMAGE_SIZE_PX or h < self.MIN_IMAGE_SIZE_PX:
-                    continue
-                img_b64 = base64.b64encode(base_img["image"]).decode()
-                doc.image_chunks.append(ImageChunk(
-                    image_b64=img_b64,
-                    caption=f"Image on page {page_idx + 1}",
-                    doc_type="pdf",
-                    source_file=str(path),
-                    page_or_slide=page_idx,
-                ))
+                # xref   = img_meta[0]
+                # base_img = fitz_doc.extract_image(xref)
+                # w, h     = base_img["width"], base_img["height"]
+                # if w < self.MIN_IMAGE_SIZE_PX or h < self.MIN_IMAGE_SIZE_PX:
+                #     continue
+                # img_b64 = base64.b64encode(base_img["image"]).decode()
+                # doc.image_chunks.append(ImageChunk(
+                #     image_b64=img_b64,
+                #     caption=f"Image on page {page_idx + 1}",
+                #     doc_type="pdf",
+                #     source_file=str(path),
+                #     page_or_slide=page_idx,
+                # ))
+                pass
         fitz_doc.close()
 
         # ─ Tables via pdfplumber ───────────────────────────────────────────
