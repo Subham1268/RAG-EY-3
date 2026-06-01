@@ -29,6 +29,7 @@ venv.bak/
 *.log
 logs/
 
+
 # Pinecone / local DB
 *.db
 *.sqlite
