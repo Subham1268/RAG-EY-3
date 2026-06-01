@@ -1,40 +1,42 @@
 # Core
-python-dotenv==1.0.0
+python-dotenv==1.0.1
 pydantic>=2.7.4
-pydantic-settings==2.2.1
+pydantic-settings==2.5.2
 
 # LangChain / LangGraph
-langchain==0.2.6
-langchain-openai==0.1.13
-langchain-community==0.2.6
+langchain==0.2.16
+langchain-openai==0.1.25
+langchain-community==0.2.17
 langchain-core>=0.2.22,<0.3.0
-langgraph==0.1.14
+langgraph==0.2.39
+langchain-cohere>=0.1.10
+cohere>=5.5.0
 
 # Document parsing
-PyMuPDF==1.24.3
-pdfplumber==0.11.0
+PyMuPDF==1.24.10
+pdfplumber==0.11.4
 python-pptx==0.6.23
 python-docx==1.1.0
 openpyxl==3.1.2
-Pillow==10.3.0
+Pillow==10.4.0
 
 # Vector & DB
-pinecone-client==3.2.2
+pinecone-client==5.0.1
 asyncpg==0.29.0
 sqlalchemy[asyncio]==2.0.31
 
-# OpenAI
-openai==1.35.3
-tiktoken==0.7.0
-
-# API + UI
-fastapi==0.111.0
-uvicorn[standard]==0.30.1
-httpx==0.27.0
-streamlit==1.33.0
+# Auth & API
+python-jose[cryptography]==3.3.0
+python-multipart==0.0.12
+fastapi==0.115.0
+uvicorn[standard]==0.31.0
+httpx==0.27.2
+streamlit==1.39.0
 
 # Utilities
-numpy==1.26.4
-tqdm==4.66.4
-structlog==24.2.0
-tenacity==8.3.0
+numpy>=1.26.4
+tqdm==4.66.5
+structlog==24.4.0
+tenacity==8.5.0
+openai==1.50.2
+tiktoken==0.7.0
