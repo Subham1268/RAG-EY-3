@@ -1,0 +1,41 @@
+# Environment variables
+.env
+.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+
+# Pinecone / local DB
+*.db
+*.sqlite
+
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# Streamlit
+.streamlit/secrets.toml
