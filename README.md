@@ -179,4 +179,4 @@ Invoke-WebRequest -Uri "http://localhost:8000/chat" `
 | `ranker_node` import error | Renamed to `reranker_node` in `graph.py` |
 | `python-jose` missing in Docker | Added to `requirements.txt` |
 | DOCX parsing `NoneType` error | Added `or ""` guard to `w:t` text extraction |
-| `--path` not applied to manifest files | Fixed path joining in `ingest.py` |
+| `--path` not applied to manifest files | Fixed path joining in `ingest.py` |# EY-RAG

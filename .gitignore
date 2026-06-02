@@ -1,52 +1,93 @@
-# ── Python ────────────────────────────────────────────────
+# # ── Python ────────────────────────────────────────────────
+# __pycache__/
+# *.py[cod]
+# *.pyo
+# *.pyd
+# *.so
+# *.egg
+# *.egg-info/
+# dist/
+# build/
+# .eggs/
+# *.whl
+
+# # ── Virtual environments ──────────────────────────────────
+# .venv/
+# venv/
+# env/
+# ENV/
+# .env.local
+
+# # ── Environment / secrets ─────────────────────────────────
+# .env
+# *.env
+
+# # ── IDE ───────────────────────────────────────────────────
+# .vscode/
+# .idea/
+# *.iml
+# *.suo
+# *.user
+# .DS_Store
+# Thumbs.db
+
+# # ── Testing / coverage ────────────────────────────────────
+# .pytest_cache/
+# .coverage
+# htmlcov/
+
+# # ── Logs ─────────────────────────────────────────────────
+# *.log
+# logs/
+
+# # ── Docker ───────────────────────────────────────────────
+# *.env.docker
+
+# # ── Pinecone / DB local state ─────────────────────────────
+# *.db
+# *.sqlite
+
+# # ── Zip archives ─────────────────────────────────────────
+# *.zip
+# Environment variables
+.env
+.env.local
+
+# Python
 __pycache__/
 *.py[cod]
-*.pyo
-*.pyd
 *.so
-*.egg
+.Python
 *.egg-info/
 dist/
 build/
-.eggs/
-*.whl
 
-# ── Virtual environments ──────────────────────────────────
-.venv/
+# Virtual environments
 venv/
+.venv/
 env/
 ENV/
-.env.local
+env.bak/
+venv.bak/
 
-# ── Environment / secrets ─────────────────────────────────
-.env
-*.env
-
-# ── IDE ───────────────────────────────────────────────────
+# IDE
 .vscode/
 .idea/
-*.iml
-*.suo
-*.user
-.DS_Store
-Thumbs.db
+*.swp
+*.swo
 
-# ── Testing / coverage ────────────────────────────────────
-.pytest_cache/
-.coverage
-htmlcov/
-
-# ── Logs ─────────────────────────────────────────────────
+# Logs
 *.log
 logs/
 
-# ── Docker ───────────────────────────────────────────────
-*.env.docker
 
-
-# ── Pinecone / DB local state ─────────────────────────────
+# Pinecone / local DB
 *.db
 *.sqlite
 
-# ── Zip archives ─────────────────────────────────────────
-*.zip
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# Streamlit
+.streamlit/secrets.toml
