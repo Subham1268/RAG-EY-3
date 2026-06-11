@@ -110,18 +110,20 @@ async def chat(
     graph = get_graph()
     try:
         state = await graph.ainvoke({
-            "question":        request.question,
-            "chat_history":    history,
-            "reflection_loops": 0,
-            "raw_chunks":      [],
-            "graded_chunks":   [],
-            "reranked_chunks": [],
-            "full_chunks":     [],
-            "citations":       [],
+            "question":          request.question,
+            "chat_history":      history,
+            "reflection_loops":  0,
+            "raw_chunks":        [],
+            "colpali_pages":     [],   # ColPali page-level hits
+            "graded_chunks":     [],
+            "reranked_chunks":   [],
+            "full_chunks":       [],
+            "page_images":       [],   # Fetched ColPali page images for GPT-4o
+            "citations":         [],
             "rewritten_queries": [],
-            "context":         "",
-            "answer":          "",
-            "final_answer":    "",
+            "context":           "",
+            "answer":            "",
+            "final_answer":      "",
             "reflection_result": {},
         })
     except Exception as exc:

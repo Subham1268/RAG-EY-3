@@ -1,58 +1,131 @@
 version: "3.9"
 
+# ─────────────────────────────────────────────────────────────────────────────
+#  EY RAG — Docker Compose
+#
+#  HOW TO USE:
+#
+#  1. First time setup (builds image, starts DB, initialises schema):
+#       docker compose up -d postgres
+#       docker compose run --rm init
+#
+#  2. Ingest documents (put PDFs/PPTX/DOCX/XLSX in ./docs):
+#       docker compose run --rm ingest
+#
+#     With a manifest and custom docs folder:
+#       docker compose run --rm ingest \
+#           python scripts/ingest.py --manifest scripts/ey_documents_manifest.json --path /data
+#
+#  3. Start the API:
+#       docker compose up -d api
+#
+#  4. Everything at once (first run):
+#       docker compose up -d
+#
+#  You NEVER need to run pip install locally. All Python deps live inside
+#  the Docker image built from Dockerfile.
+# ─────────────────────────────────────────────────────────────────────────────
+
+x-app-env: &app-env
+  env_file: .env
+  environment:
+    DATABASE_URL: postgresql+asyncpg://ey_rag_user:localdev_password@postgres:5432/ey_rag
+    APP_ENV: development
+  depends_on:
+    postgres:
+      condition: service_healthy
+
+x-app-build: &app-build
+  build:
+    context: .
+    dockerfile: Dockerfile
+
 services:
+
   # ── PostgreSQL metadata store ──────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
     container_name: ey_rag_postgres
     environment:
-      POSTGRES_DB:       ey_rag
-      POSTGRES_USER:     ey_rag_user
+      POSTGRES_DB: ey_rag
+      POSTGRES_USER: ey_rag_user
       POSTGRES_PASSWORD: localdev_password
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ey_rag_user -d ey_rag"]
+      test: [ "CMD-SHELL", "pg_isready -U ey_rag_user -d ey_rag" ]
       interval: 5s
       timeout: 5s
       retries: 5
 
+  # ── One-shot: initialise DB schema + Pinecone index ────────────────────────
+  #  Run once before first ingest:
+  #    docker compose run --rm init
+  init:
+    <<: [ *app-build, *app-env ]
+    container_name: ey_rag_init
+    volumes:
+      - .:/app
+    command: python scripts/init_db.py
+    profiles: [ "tools" ] # won't start with plain `docker compose up`
+
+  # ── One-shot: ingest documents ─────────────────────────────────────────────
+  #  Place docs in ./docs (or set DOCS_PATH in .env) then run:
+  #    docker compose run --rm ingest
+  #
+  #  The ./docs folder on your host is mounted to /data inside the container.
+  #  Override DOCS_PATH in .env to change the host folder, e.g.:
+  #    DOCS_PATH=C:\Data\vs codes\ey_rag\docs
+  ingest:
+    <<: [ *app-build, *app-env ]
+    container_name: ey_rag_ingest
+    volumes:
+      - .:/app
+      - ${DOCS_PATH:-./docs}:/data
+    command: >
+      python scripts/ingest.py
+        --manifest scripts/ey_documents_manifest.json
+        --path /data
+    profiles: [ "tools" ] # won't start with plain `docker compose up`
+
   # ── FastAPI RAG Agent ──────────────────────────────────────────────────────
   api:
-    build:
-      context: ..
-      dockerfile: infra/Dockerfile
+    <<: [ *app-build, *app-env ]
     container_name: ey_rag_api
-    env_file: ../.env
-    environment:
-      DATABASE_URL: postgresql+asyncpg://ey_rag_user:localdev_password@postgres:5432/ey_rag
-      APP_ENV: development
     ports:
       - "8000:8000"
-    depends_on:
-      postgres:
-        condition: service_healthy
     volumes:
-      - ../:/app
+      - .:/app # hot-reload: code changes reflect immediately
     command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # ── Streamlit UI ───────────────────────────────────────────────────────────
+  streamlit:
+    <<: [ *app-build, *app-env ]
+    container_name: ey_rag_streamlit
+    ports:
+      - "8501:8501"
+    volumes:
+      - .:/app
+    environment:
+      API_URL: http://api:8000 # ← service name, not localhost
+    depends_on:
+      - api
+    command: streamlit run ui/streamlit_app.py --server.port 8501 --server.address 0.0.0.0
 
   # ── Teams Bot ──────────────────────────────────────────────────────────────
   bot:
-    build:
-      context: ..
-      dockerfile: infra/Dockerfile
+    <<: [ *app-build, *app-env ]
     container_name: ey_rag_bot
-    env_file: ../.env
     environment:
       AGENT_API_URL: http://api:8000
-      APP_ENV: development
     ports:
       - "3978:3978"
     depends_on:
       - api
     command: python teams/app.py
+    profiles: [ "teams" ] # opt-in only
 
 volumes:
   postgres_data:

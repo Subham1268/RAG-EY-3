@@ -2,6 +2,7 @@ import streamlit as st
 import httpx
 import uuid
 import time
+import os
 
 # =====================================================
 # PAGE CONFIG
@@ -288,8 +289,10 @@ if (
 
     try:
 
+        API_URL = os.getenv("API_URL", "http://localhost:8000")
+
         response = httpx.post(
-            "http://localhost:8000/chat",
+            f"{API_URL}/chat",
             json={
                 "question": last_question,
                 "session_id": st.session_state.session_id
