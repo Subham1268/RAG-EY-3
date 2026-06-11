@@ -125,7 +125,11 @@ async def chat(
             "reflection_result": {},
         })
     except Exception as exc:
-        log.error("agent_error", error=str(exc))
+        import traceback
+        tb = traceback.format_exc()
+        print("=== AGENT ERROR ===")
+        print(tb)
+        print("===================")
         raise HTTPException(status_code=500, detail=f"Agent error: {exc}")
 
     answer    = state.get("final_answer") or state.get("answer", "")
