@@ -73,7 +73,7 @@ class Settings(BaseSettings):
     chunk_size: int = 800
     chunk_overlap: int = 150
     max_reflection_loops: int = 2
-#     cache_ttl_seconds: int = 3600
+    colpali_enabled: bool = True
 
 #     # ── App ───────────────────────────────────────────────
 #     app_env: str = "development"

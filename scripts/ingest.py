@@ -45,16 +45,19 @@ from ingestion.indexer import DocumentIndexer
 from ingestion.metadata_extractor import extract_metadata_from_document
 from config.settings import get_settings
 
+settings = get_settings()
+
 # ColPali — optional, degrades gracefully if byaldi not installed
 try:
     from ingestion.colpali_embedder import ColPaliEmbedder
     from ingestion.colpali_indexer import ColPaliIndexer
-    COLPALI_ENABLED = True
+    COLPALI_ENABLED = settings.colpali_enabled
+    if not COLPALI_ENABLED:
+        print("ℹ️  ColPali disabled by configuration.")
 except ImportError:
     COLPALI_ENABLED = False
     print("⚠️  ColPali not available. Running chunk pipeline only.")
 
-settings = get_settings()
 parser   = DocumentParser()
 
 

@@ -17,6 +17,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libreoffice \
     # Utilities
     curl \
+    build-essential \
+    python3-dev \
+    g++ \
+    make \
+    cmake \
+    swig \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

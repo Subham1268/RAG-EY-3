@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 # ── Request models ────────────────────────────────────────────────────────────
 
 class ChatRequest(BaseModel):
-    question:   str = Field(..., min_length=3, max_length=2000,
+    question:   str = Field(..., min_length=1, max_length=2000,
                             description="The consultant's question")
     session_id: str | None = Field(None,
                             description="Session ID for conversation continuity. "

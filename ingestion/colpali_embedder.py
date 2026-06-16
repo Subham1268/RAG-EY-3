@@ -73,8 +73,11 @@ class ColPaliEmbedder:
     def _get_model(self) -> RAGMultiModalModel:
         """Lazy load ColPali model (downloads on first use ~5GB)."""
         if self._model is None:
-            print(f"Loading ColPali model: {self.MODEL_NAME} (first load downloads ~5GB)...")
-            self._model = RAGMultiModalModel.from_pretrained(self.MODEL_NAME)
+            import torch
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            print(f"Loading ColPali model: {self.MODEL_NAME} on {device} (first load downloads ~5GB)...")
+            # Force explicit device to avoid 'meta tensor' issues in some environments
+            self._model = RAGMultiModalModel.from_pretrained(self.MODEL_NAME, device=device)
             print("ColPali model loaded.")
         return self._model
 

@@ -71,6 +71,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["https://teams.microsoft.com", "https://*.teams.microsoft.com"],

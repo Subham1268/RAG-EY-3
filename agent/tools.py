@@ -74,7 +74,7 @@ def _get_colpali_embedder():
         try:
             from ingestion.colpali_embedder import ColPaliEmbedder
             _colpali_embedder = ColPaliEmbedder()
-        except ImportError:
+        except Exception:
             return None
     return _colpali_embedder
 
