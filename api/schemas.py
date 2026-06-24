@@ -9,40 +9,33 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 
-# ── Request models ────────────────────────────────────────────────────────────
-
 class ChatRequest(BaseModel):
-    question:   str = Field(..., min_length=1, max_length=2000,
-                            description="The consultant's question")
-    session_id: str | None = Field(None,
-                            description="Session ID for conversation continuity. "
-                                        "If omitted, a new session is created.")
-    filters: dict[str, Any] | None = Field(None,
-                            description="Optional metadata filters: country, practice, year, doc_type")
+    question:   str            = Field(..., min_length=1, max_length=2000)
+    session_id: str | None     = Field(None, description="Omit to start a new session.")
+    filters:    dict[str, Any] | None = Field(None, description="country, practice, year, doc_type")
 
 
 class IngestRequest(BaseModel):
-    file_path: str = Field(..., description="Absolute path to the document on the server")
-    metadata:  dict[str, Any] | None = Field(None,
-                            description="Project metadata: engagement_id, client, country, practice, year")
+    file_path: str             = Field(..., description="Absolute path to the document on the server")
+    metadata:  dict[str, Any] | None = Field(None)
 
-
-# ── Response models ───────────────────────────────────────────────────────────
 
 class Citation(BaseModel):
     label:         str
     source_file:   str
-    page_label:    str   # "Page" | "Slide" | "Section"
-    page:          Any   # int or str "N/A"
+    page_label:    str
+    page:          Any
     section:       str
     engagement_id: str
     doc_type:      str
+    kind:          str = "text"   # text | table | image
 
 
 class ChatResponse(BaseModel):
     session_id:       str
     answer:           str
     citations:        list[Citation]
+    tables:           list[str]   # markdown table strings extracted from the answer
     queries_used:     list[str]
     chunks_retrieved: int
     latency_ms:       int
@@ -56,6 +49,12 @@ class ResetResponse(BaseModel):
 class HealthResponse(BaseModel):
     status:  str
     version: str
+
+
+class StatusResponse(BaseModel):
+    total_chunks:    int
+    total_documents: int
+    namespaces:      dict[str, int]
 
 
 class DocumentListResponse(BaseModel):

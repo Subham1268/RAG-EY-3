@@ -91,3 +91,4 @@ Thumbs.db
 
 # Streamlit
 .streamlit/secrets.toml
+.env.save

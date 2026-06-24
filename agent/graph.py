@@ -3,44 +3,10 @@ agent/graph.py
 ───────────────
 Assembles the LangGraph state machine for the Agentic RAG pipeline.
 
-Graph topology:
-
-  START
-    │
-    ▼
-  query_rewriter  (Multi-Query generation)
-    │
-    ▼
-  retriever       (Parallel hybrid Pinecone search)
-    │
-    ▼
-  retrieval_grader (Self-RAG relevance filtering)
-    │
-    ▼
-  reranker        (Cohere cross-encoder top-N)
-    │
-    ▼
-  context_builder (Postgres fetch + context assembly)
-    │
-    ▼
-  generator       (GPT-4o answer synthesis)
-    │
-    ▼
-  reflection_grader (CRAG quality check)
-    │
-    ├── "retry" → retry_prep → query_rewriter (loop back, max N times)
-    │
-    └── "end"   → END
-
-Usage:
-    from agent.graph import build_graph
-    graph = build_graph()
-    result = await graph.ainvoke({
-        "question": "What AML frameworks has EY Middle East implemented in UAE?",
-        "chat_history": [],
-        "reflection_loops": 0,
-    })
-    print(result["final_answer"])
+Topology:
+  START → query_rewriter → retriever → retrieval_grader → reranker
+        → context_builder → generator → reflection_grader
+        → "retry" (loop back) | "end" → END
 """
 
 from langgraph.graph import END, START, StateGraph

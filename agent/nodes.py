@@ -1,18 +1,18 @@
 """
 agent/nodes.py
 ───────────────
-LangGraph node functions — updated for hybrid ColPali + chunk retrieval.
+LangGraph node functions for the hybrid ColPali + chunk retrieval pipeline.
 
-Key changes from previous version:
-  1. retriever_node     — calls BOTH hybrid_retrieval (chunks) AND colpali_retrieval (pages),
-                          merges results, tags each hit with its source pipeline.
-  2. context_builder_node — fetches full chunk text AND ColPali page images.
-                            Page images are passed to the generator as vision content.
-  3. generator_node     — sends a multimodal message to GPT-4o:
-                          text context (from chunks) + page images (from ColPali).
-                          This gives GPT-4o both precise text AND visual context.
-
-All other nodes (query_rewriter, retrieval_grader, reranker, reflection) unchanged.
+Nodes:
+  1. query_rewriter_node   — expand question into multiple search queries
+  2. retriever_node        — parallel hybrid (Pinecone) + ColPali retrieval
+  3. retrieval_grader_node — pass-through (can be extended for self-RAG grading)
+  4. reranker_node         — score-based top-N selection
+  5. context_builder_node  — fetch full chunk text + ColPali page images
+  6. generator_node        — multimodal GPT-4o generation; extracts inline tables
+  7. reflection_grader_node — CRAG quality check
+  8. should_retry          — conditional edge
+  9. retry_prep_node       — set up retry with refined query
 """
 
 from __future__ import annotations
@@ -22,6 +22,7 @@ import json
 import re
 from typing import Any, TypedDict
 
+import openai
 from langchain_openai import ChatOpenAI
 
 from agent.prompts import (
@@ -29,6 +30,7 @@ from agent.prompts import (
     GENERATION_PROMPT,
     QUERY_REWRITE_PROMPT,
     REFLECTION_PROMPT,
+    RERANK_PROMPT,
 )
 from agent.tools import (
     colpali_retrieval,
@@ -39,8 +41,6 @@ from agent.tools import (
 from config.settings import get_settings
 
 settings = get_settings()
-
-# ── LLM instances ─────────────────────────────────────────────────────────────
 
 _llm = ChatOpenAI(
     model=settings.openai_chat_model,
@@ -55,40 +55,65 @@ _llm_json = ChatOpenAI(
     openai_api_key=settings.openai_api_key,
 )
 
-# ── State schema ──────────────────────────────────────────────────────────────
+_openai_client = openai.AsyncOpenAI(api_key=settings.openai_api_key)
+
+
+# ── State schema ───────────────────────────────────────────────────────────────
 
 class AgentState(TypedDict):
     question:          str
     chat_history:      list[dict]
     rewritten_queries: list[str]
-    raw_chunks:        list[dict]   # chunk hits from hybrid_retrieval
-    colpali_pages:     list[dict]   # page hits from colpali_retrieval (NEW)
+    raw_chunks:        list[dict]
+    colpali_pages:     list[dict]
     graded_chunks:     list[dict]
     reranked_chunks:   list[dict]
     full_chunks:       list[dict]
-    page_images:       list[dict]   # fetched ColPali page images (NEW)
+    page_images:       list[dict]
     context:           str
     answer:            str
+    tables:            list[str]   # markdown tables extracted from the answer
     citations:         list[dict]
     reflection_loops:  int
     reflection_result: dict
     final_answer:      str
 
 
-# ── Node 1: Query Rewriter ────────────────────────────────────────────────────
+# ── Helpers ────────────────────────────────────────────────────────────────────
+
+def _extract_tables(text: str) -> list[str]:
+    """Extract all markdown table blocks from a text string."""
+    lines   = text.splitlines()
+    tables  = []
+    current = []
+
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("|"):
+            current.append(line)
+        else:
+            if len(current) >= 2:   # header + separator = valid table
+                tables.append("\n".join(current))
+            current = []
+
+    if len(current) >= 2:
+        tables.append("\n".join(current))
+
+    return tables
+
+
+# ── Node 1: Query Rewriter ─────────────────────────────────────────────────────
 
 async def query_rewriter_node(state: AgentState) -> dict:
     history_str = "\n".join(
         f"{m['role'].upper()}: {m['content']}"
         for m in state["chat_history"][-6:]
     )
-    prompt = QUERY_REWRITE_PROMPT.format(
-        n=2,
-        history=history_str or "None",
-        question=state["question"],
+    prompt   = QUERY_REWRITE_PROMPT.format(
+        n=2, history=history_str or "None", question=state["question"],
     )
     response = await _llm.ainvoke(prompt)
-    raw = response.content.strip()
+    raw      = response.content.strip()
 
     try:
         queries = json.loads(raw)
@@ -103,38 +128,17 @@ async def query_rewriter_node(state: AgentState) -> dict:
     return {"rewritten_queries": queries[:2]}
 
 
-# ── Node 2: Retriever (UPDATED — hybrid + ColPali) ────────────────────────────
+# ── Node 2: Retriever ──────────────────────────────────────────────────────────
 
 async def retriever_node(state: AgentState) -> dict:
-    """
-    Run hybrid chunk retrieval AND ColPali page retrieval in parallel.
-    
-    - hybrid_retrieval  → fine-grained chunk hits (text, tables, image descriptions)
-    - colpali_retrieval → page-level visual hits (for GPT-4o image context)
-    
-    Both use the same query. ColPali degrades gracefully if not installed.
-    """
+    """Run hybrid chunk + ColPali page retrieval in parallel."""
     queries = state["rewritten_queries"]
 
-    # ── Chunk retrieval (parallel across queries) ─────────────────────────────
-    chunk_tasks = [
-        hybrid_retrieval(q, top_k=settings.max_retrieval_k)
-        for q in queries
-    ]
+    chunk_tasks  = [hybrid_retrieval(q, top_k=settings.max_retrieval_k) for q in queries]
+    colpali_task = colpali_retrieval(queries[0], top_k=5)
 
-    # ── ColPali page retrieval (use first/primary query only) ─────────────────
-    # ColPali is slower so we use one query rather than all rewritten variants
-    colpali_task = colpali_retrieval(
-        queries[0],    # primary query
-        top_k=5,       # top 5 pages is enough for visual context
-    )
+    *chunk_results_list, colpali_results = await asyncio.gather(*chunk_tasks, colpali_task)
 
-    # Run all in parallel
-    *chunk_results_list, colpali_results = await asyncio.gather(
-        *chunk_tasks, colpali_task
-    )
-
-    # ── Merge + deduplicate chunk results ─────────────────────────────────────
     merged: dict[str, dict] = {}
     for results in chunk_results_list:
         for chunk in results:
@@ -146,36 +150,67 @@ async def retriever_node(state: AgentState) -> dict:
 
     return {
         "raw_chunks":    sorted_chunks[:settings.max_retrieval_k],
-        "colpali_pages": colpali_results,   # page hits (may be empty if ColPali disabled)
+        "colpali_pages": colpali_results,
     }
 
 
-# ── Node 3: Retrieval Grader (pass-through for speed) ────────────────────────
+# ── Node 3: Retrieval Grader (pass-through) ────────────────────────────────────
 
 async def retrieval_grader_node(state: AgentState) -> dict:
     return {"graded_chunks": state["raw_chunks"]}
 
 
-# ── Node 4: Reranker (score-based, no Cohere call) ────────────────────────────
+# ── Node 4: Reranker (OpenAI LLM-based cross-encoder) ──────────────────────────
 
 async def reranker_node(state: AgentState) -> dict:
+    """
+    Rerank candidate chunks for relevance using an OpenAI LLM (replaces Cohere).
+    Falls back to embedding-score ordering if the LLM call fails.
+    """
     chunks = state["graded_chunks"]
     if not chunks:
         return {"reranked_chunks": []}
-    top_n    = settings.rerank_top_n
-    reranked = sorted(chunks, key=lambda x: x.get("score", 0), reverse=True)[:top_n]
-    return {"reranked_chunks": reranked}
+
+    top_n      = settings.rerank_top_n
+    candidates = chunks[:settings.max_retrieval_k]
+
+    # Embedding-score order is the fallback / tie-breaker.
+    score_order = sorted(candidates, key=lambda x: x.get("score", 0), reverse=True)
+
+    if len(candidates) <= top_n:
+        return {"reranked_chunks": score_order[:top_n]}
+
+    passages = "\n\n".join(
+        f"[{i}] {(c.get('content_preview') or c.get('metadata', {}).get('content_preview', ''))[:400]}"
+        for i, c in enumerate(candidates)
+    )
+    prompt = RERANK_PROMPT.format(question=state["question"], n=top_n, passages=passages)
+
+    try:
+        response = await _llm_json.ainvoke(prompt)
+        ranking  = json.loads(response.content).get("ranking", [])
+        seen: set[int] = set()
+        reranked: list[dict] = []
+        for idx in ranking:
+            if isinstance(idx, int) and 0 <= idx < len(candidates) and idx not in seen:
+                seen.add(idx)
+                reranked.append(candidates[idx])
+        # Backfill from score order if the LLM returned too few
+        for c in score_order:
+            if len(reranked) >= top_n:
+                break
+            if c not in reranked:
+                reranked.append(c)
+    except Exception:
+        reranked = score_order
+
+    return {"reranked_chunks": reranked[:top_n]}
 
 
-# ── Node 5: Context Builder (UPDATED — fetches chunks + ColPali page images) ──
+# ── Node 5: Context Builder ────────────────────────────────────────────────────
 
 async def context_builder_node(state: AgentState) -> dict:
-    """
-    1. Fetch full chunk text from Postgres for all reranked chunks.
-    2. Fetch page images from Postgres for all ColPali page hits.
-    3. Build text context string (for prompt).
-    4. Store page_images list (passed to generator for GPT-4o vision).
-    """
+    """Fetch full chunk text + ColPali page images; build text context."""
     chunks       = state["reranked_chunks"]
     colpali_hits = state.get("colpali_pages", [])
 
@@ -187,13 +222,12 @@ async def context_builder_node(state: AgentState) -> dict:
             "page_images": [],
         }
 
-    # ── Fetch full chunk texts ────────────────────────────────────────────────
-    full_tasks = [fetch_full_chunk(c["chunk_id"]) for c in chunks]
-    full_data  = await asyncio.gather(*full_tasks)
+    # Fetch full chunk texts in parallel
+    full_data   = await asyncio.gather(*[fetch_full_chunk(c["chunk_id"]) for c in chunks])
     full_chunks = [f for f in full_data if f is not None]
 
-    citations: list[dict]    = []
-    context_parts: list[str] = []
+    citations:     list[dict] = []
+    context_parts: list[str]  = []
 
     for i, fc in enumerate(full_chunks, 1):
         source_file   = fc.get("source_file", "Unknown")
@@ -202,127 +236,97 @@ async def context_builder_node(state: AgentState) -> dict:
         doc_type      = fc.get("doc_type", "")
         engagement_id = fc.get("engagement_id", "")
         kind          = fc.get("kind", "text")
-        content       = fc.get("content", "")[:1500]
+        content       = fc.get("content", "")[:2000]   # more context for tables
 
         label      = f"Source {i}"
         page_label = "Page" if doc_type == "pdf" else "Slide" if doc_type == "pptx" else "Section"
+        kind_tag   = f" [{kind.upper()}]" if kind in ("table", "image") else ""
 
-        # Tag the kind so GPT knows what type of content this is
-        kind_tag = f" [{kind.upper()}]" if kind in ("table", "image") else ""
-
-        context_part = (
+        context_parts.append(
             f"[{label}]{kind_tag} {source_file} | {page_label} {page_or_slide}"
             + (f" | {section_title}" if section_title else "")
             + f"\n{content}"
         )
-        context_parts.append(context_part)
-
         citations.append({
-            "label":        label,
-            "source_file":  source_file,
-            "page_label":   page_label,
-            "page":         page_or_slide,
-            "section":      section_title,
+            "label":         label,
+            "source_file":   source_file,
+            "page_label":    page_label,
+            "page":          page_or_slide,
+            "section":       section_title,
             "engagement_id": engagement_id,
-            "doc_type":     doc_type,
-            "kind":         kind,
+            "doc_type":      doc_type,
+            "kind":          kind,
         })
 
-    # ── Fetch ColPali page images ─────────────────────────────────────────────
-    page_image_tasks = [fetch_colpali_page(hit["page_id"]) for hit in colpali_hits]
-    page_image_data  = await asyncio.gather(*page_image_tasks)
-    page_images      = [p for p in page_image_data if p is not None]
+    # Fetch ColPali page images in parallel
+    page_image_data = await asyncio.gather(*[fetch_colpali_page(h["page_id"]) for h in colpali_hits])
+    page_images     = [p for p in page_image_data if p is not None]
 
-    context = "\n\n---\n\n".join(context_parts)
     return {
-        "context":     context,
+        "context":     "\n\n---\n\n".join(context_parts),
         "full_chunks": full_chunks,
         "citations":   citations,
-        "page_images": page_images,   # list of {page_image_b64, source_file, page_idx, ...}
+        "page_images": page_images,
     }
 
 
-# ── Node 6: Generator (UPDATED — multimodal GPT-4o with page images) ──────────
+# ── Node 6: Generator ─────────────────────────────────────────────────────────
 
 async def generator_node(state: AgentState) -> dict:
     """
     Multimodal generation:
-      - System prompt + chat history (as before)
-      - Text context from chunks (as before)
-      - Page images from ColPali hits passed as vision content (NEW)
-
-    GPT-4o receives both the text descriptions AND the actual page images,
-    giving it full visual understanding of charts, tables, and diagrams.
-
-    If no ColPali pages are available, falls back to text-only generation.
+    - Text context from chunks (always)
+    - Up to 3 ColPali page images for visual context (when available)
+    Extracts markdown tables from the answer and returns them separately.
     """
     page_images = state.get("page_images", [])
-
     prompt_text = GENERATION_PROMPT.format(
         question=state["question"],
         context=state["context"],
     )
 
-    # ── Text-only path (no ColPali pages) ────────────────────────────────────
     if not page_images:
+        # Text-only path
         messages = [
             {"role": "system", "content": AGENT_SYSTEM_PROMPT},
             *state["chat_history"][-4:],
             {"role": "user", "content": prompt_text},
         ]
         response = await _llm.ainvoke(messages)
-        return {"answer": response.content.strip()}
+        answer   = response.content.strip()
+    else:
+        # Multimodal path — include up to 3 ColPali page images
+        user_content: list[dict] = [{"type": "text", "text": prompt_text}]
+        for pg in page_images[:3]:
+            img_b64  = pg.get("page_image_b64", "")
+            page_idx = pg.get("page_idx", 0)
+            src_file = pg.get("source_file", "")
+            if not img_b64:
+                continue
+            user_content.append({"type": "text", "text": f"[Page image: {src_file}, page {page_idx + 1}]"})
+            user_content.append({
+                "type": "image_url",
+                "image_url": {"url": f"data:image/png;base64,{img_b64}", "detail": "low"},
+            })
 
-    # ── Multimodal path (with ColPali page images) ────────────────────────────
-    # Build a multimodal user message: text prompt + page images
-    # Cap at 3 page images to keep token cost reasonable
-    images_to_send = page_images[:3]
+        openai_messages = [
+            {"role": "system", "content": AGENT_SYSTEM_PROMPT},
+            *state["chat_history"][-4:],
+            {"role": "user", "content": user_content},
+        ]
+        resp   = await _openai_client.chat.completions.create(
+            model=settings.openai_chat_model,
+            messages=openai_messages,
+            max_tokens=1500,
+            temperature=0,
+        )
+        answer = resp.choices[0].message.content.strip()
 
-    user_content: list[dict] = [
-        {"type": "text", "text": prompt_text},
-    ]
-
-    for pg in images_to_send:
-        img_b64   = pg.get("page_image_b64", "")
-        page_idx  = pg.get("page_idx", 0)
-        src_file  = pg.get("source_file", "")
-        if not img_b64:
-            continue
-        user_content.append({
-            "type": "text",
-            "text": f"[Page image: {src_file}, page {page_idx + 1}]",
-        })
-        user_content.append({
-            "type": "image_url",
-            "image_url": {
-                "url":    f"data:image/png;base64,{img_b64}",
-                "detail": "low",   # use "high" for dense data charts if token budget allows
-            },
-        })
-
-    # Use the raw OpenAI client for multimodal (LangChain handles this too
-    # but direct client is cleaner for mixed content lists)
-    import openai
-    from config.settings import get_settings as _gs
-    _settings = _gs()
-    client = openai.AsyncOpenAI(api_key=_settings.openai_api_key)
-
-    openai_messages = [
-        {"role": "system", "content": AGENT_SYSTEM_PROMPT},
-        *state["chat_history"][-4:],
-        {"role": "user", "content": user_content},
-    ]
-
-    response = await client.chat.completions.create(
-        model=_settings.openai_chat_model,
-        messages=openai_messages,
-        max_tokens=1500,
-        temperature=0,
-    )
-    return {"answer": response.choices[0].message.content.strip()}
+    tables = _extract_tables(answer)
+    return {"answer": answer, "tables": tables}
 
 
-# ── Node 7: Reflection Grader ─────────────────────────────────────────────────
+# ── Node 7: Reflection Grader ──────────────────────────────────────────────────
 
 async def reflection_grader_node(state: AgentState) -> dict:
     if settings.max_reflection_loops == 0:
@@ -330,10 +334,7 @@ async def reflection_grader_node(state: AgentState) -> dict:
             "reflection_result": {"quality": "good"},
             "final_answer":      state["answer"],
         }
-    prompt = REFLECTION_PROMPT.format(
-        question=state["question"],
-        answer=state["answer"],
-    )
+    prompt = REFLECTION_PROMPT.format(question=state["question"], answer=state["answer"])
     try:
         response = await _llm_json.ainvoke(prompt)
         result   = json.loads(response.content)
@@ -345,7 +346,7 @@ async def reflection_grader_node(state: AgentState) -> dict:
     }
 
 
-# ── Node 8: Conditional edge ──────────────────────────────────────────────────
+# ── Node 8: Conditional edge ───────────────────────────────────────────────────
 
 def should_retry(state: AgentState) -> str:
     if settings.max_reflection_loops == 0:
@@ -361,16 +362,17 @@ def should_retry(state: AgentState) -> str:
     return "end"
 
 
-# ── Node 9: Retry Prep ────────────────────────────────────────────────────────
+# ── Node 9: Retry Prep ─────────────────────────────────────────────────────────
 
 async def retry_prep_node(state: AgentState) -> dict:
     followup = state["reflection_result"].get("suggested_followup_query", state["question"])
     return {
-        "question":        followup,
+        "question":         followup,
         "reflection_loops": state.get("reflection_loops", 0) + 1,
-        "raw_chunks":      [],
-        "colpali_pages":   [],
-        "graded_chunks":   [],
-        "reranked_chunks": [],
-        "page_images":     [],
+        "raw_chunks":       [],
+        "colpali_pages":    [],
+        "graded_chunks":    [],
+        "reranked_chunks":  [],
+        "page_images":      [],
+        "tables":           [],
     }

@@ -156,9 +156,14 @@ async def colpali_retrieval(
     Returns page-level results (not chunks) — used to fetch full page
     images for GPT-4o visual context in the generator.
 
-    Falls back to empty list if ColPali is not installed/available.
+    Falls back to empty list if ColPali is disabled or not available.
     """
     import asyncio
+
+    # Respect the COLPALI_ENABLED flag — never load the heavy model at query
+    # time when ColPali is turned off (avoids a 5GB CPU model load + timeout).
+    if not settings.colpali_enabled:
+        return []
 
     colpali_emb = _get_colpali_embedder()
     if colpali_emb is None:
